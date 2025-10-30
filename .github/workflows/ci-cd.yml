@@ -1,0 +1,64 @@
+name: CI/CD to Aliyun ACR
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "20.x"
+  IMAGE_NAME: "${{ github.repository }}"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build Next.js app
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          AI_PROVIDER_URL: ${{ secrets.AI_PROVIDER_URL }}
+          AI_PROVIDER_API_KEY: ${{ secrets.AI_PROVIDER_API_KEY }}
+          AI_PROVIDER_MODEL: ${{ secrets.AI_PROVIDER_MODEL }}
+          VOICE_API_URL: ${{ secrets.VOICE_API_URL }}
+          VOICE_API_APP_ID: ${{ secrets.VOICE_API_APP_ID }}
+          VOICE_API_KEY: ${{ secrets.VOICE_API_KEY }}
+          VOICE_API_SECRET: ${{ secrets.VOICE_API_SECRET }}
+          NEXT_PUBLIC_AMAP_KEY: ${{ secrets.NEXT_PUBLIC_AMAP_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+
+      - name: Log in to Aliyun ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ALIYUN_REGISTRY }}
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ secrets.ALIYUN_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+
+      - name: Push Docker image
+        run: |
+          docker push ${{ secrets.ALIYUN_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Update latest tag
+        run: |
+          docker tag ${{ secrets.ALIYUN_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ secrets.ALIYUN_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ secrets.ALIYUN_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
